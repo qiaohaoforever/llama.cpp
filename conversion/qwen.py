@@ -310,7 +310,17 @@ class _QwenMtpMixin:
         key = next((k for k in ["n_layers", "num_hidden_layers", "n_layer", "num_layers"] if k in hparams), None)
         type(self)._original_block_count = hparams.get(key)
         type(self).opt_num_mtp_layers = 0
-        return super().index_tensors(remote_hf_model_id=remote_hf_model_id)  # ty: ignore[unresolved-attribute]
+        tensors = super().index_tensors(remote_hf_model_id=remote_hf_model_id)  # ty: ignore[unresolved-attribute]
+        if not self.no_mtp and not any(n.startswith(("mtp.", "model.mtp.")) for n in tensors):
+            logger.warning(
+                "Config declares MTP layers but no mtp.* tensors were found "
+                "(fine-tuned/merged checkpoints often drop the MTP head); "
+                "converting as if --no-nextn was given."
+            )
+            type(self).no_mtp = True
+            self.block_count = type(self)._original_block_count
+            self.tensor_map = gguf.get_tensor_name_map(self.model_arch, self.block_count)
+        return tensors
 
     @classmethod
     def filter_tensors(cls, item):
